@@ -1,0 +1,41 @@
+Enterprise Code Review Pipeline Architecture
+
+1. System Topology (Fan-Out / Fan-In Pipeline)
+
+This AI-driven quality gate utilizes a structured LangGraph4j State Graph to enforce Conway's Law and strict organizational compliance before code merges.
+
+Execution Flow:
+
+[Gatekeeper]: Validates scope. Skips if only markdown changes.
+
+[Domain Context Oracle]: Intercepts the diff, maps file paths to Team Domains, and flags cross-domain coupling.
+
+[Parallel Auditing Pipeline]:
+
+Security Guard: Hunts for OWASP threats and credential leaks.
+
+Performance Critic: Audits algorithmic complexity and memory patterns.
+
+Business Analysis (BA): Validates against Product Acceptance Criteria.
+
+Tech Reviewer: Enforces Mandates 5.1 - 5.5 (No @Inject outside controllers, strict PCI PAN masking, formatting, and exception handling).
+
+Observability: Checks logging levels and tracing.
+
+[DoneDef Synchronizer]: Merges all audit logs and generates the final compliance report.
+
+[Conditional Router]: Reads the violationRegistry. Triggers MERGE APPROVED if empty, or MERGE REJECTED if critical flaws exist.
+
+2. In-Memory Graph State Channels (The Data Bus)
+
+rawGitDiff (Base): The raw PR code.
+
+acceptanceCriteria (Base): Product constraints.
+
+domainContext (Base): Extracted team ownership boundaries.
+
+auditLogs (Appender): Collection of all agent markdown reports.
+
+violationRegistry (Appender): Tracks explicit compliance failures.
+
+isApproved (Base): The final boolean routing decision.
