@@ -1,0 +1,73 @@
+diff --git a/src/main/java/com/billing/PaymentService.java
++++ b/src/main/java/com/billing/PaymentService.java
+@@ -1,5 +1,6 @@
+package com.billing;
+
++import com.inventory.StockManager; // CROSS-DOMAIN COUPLING
+import jakarta.inject.Inject;
+import java.sql.Connection;
+
+@@ -12,4 +13,31 @@
+
+public class PaymentService {
+
+@Inject DatabaseConnection db; // ILLEGAL INJECT OUTSIDE CONTROLLER
+
+private static final String STRIPE_KEY = "sk_live_1234567890abcdef"; // HARDCODED SECRET
+
+public void processTransaction(String panNumber) {
+
+   System.out.println("Processing raw payment for PAN: " + panNumber); // PCI BREACH!
+
+
+   if(panNumber == null) {
+
+
+       throw new RuntimeException("PAN Missing"); // ILLEGAL RTE!
+
+
+   }
+
+
+   // Unclosed database connection and raw SQL injection risk
+
+
+   Connection conn = db.getConnection();
+
+
+   conn.createStatement().execute("UPDATE payments SET status='PAID' WHERE pan = " + panNumber);
+
+
+   // Terrible performance: O(n^2) nested loop doing nothing
+
+
+   for(int i = 0; i < 1000; i++) {
+
+
+      for(int j = 0; j < 1000; j++) {
+
+
+         String temp = "Processing chunk: " + i + "-" + j;
+
+
+      }
+
+
+   }
+
+
+   // Terrible code styling/formatting
+
+
+     if(true){
+
+
+   int x=1;
+
+
+       }
+
+
+}
+
+}

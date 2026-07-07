@@ -36,56 +36,54 @@ public class CodeReviewComplianceEngine {
     public static class ReviewState extends AgentState {
         // Using Map.ofEntries because we have more than 10 channels mapped
         public static final Map<String, Channel<?>> SCHEMA = Map.ofEntries(
-            Map.entry("rawGitDiff", Channels.base(() -> "")),
-            Map.entry("acceptanceCriteria", Channels.base(() -> "")),
-            Map.entry("domainContext", Channels.base(() -> "")),
-            
-            // Specialist Logging Channels
-            Map.entry("gatekeeperLog", Channels.base(() -> "")),
-            Map.entry("vulnerabilityLog", Channels.base(() -> "")),
-            Map.entry("performanceLog", Channels.base(() -> "")),
-            Map.entry("businessAnalysisLog", Channels.base(() -> "")),
-            
-            // --- NEW: Splitting the Tech Review into isolated tracks ---
-            Map.entry("pciComplianceLog", Channels.base(() -> "")),
-            Map.entry("diComplianceLog", Channels.base(() -> "")),
-            Map.entry("exceptionLog", Channels.base(() -> "")),
-            Map.entry("stylingLog", Channels.base(() -> "")),
-            
-            Map.entry("observabilityLog", Channels.base(() -> "")),
-            
-            // Output & Control Channels
-            Map.entry("violationRegistry", Channels.appender(ArrayList::new)),
-            Map.entry("finalMergedReport", Channels.base(() -> "")),
-            Map.entry("isApproved", Channels.base(() -> false))
+                Map.entry("rawGitDiff", Channels.base(() -> "")),
+                Map.entry("acceptanceCriteria", Channels.base(() -> "")),
+                Map.entry("domainContext", Channels.base(() -> "")),
+
+                // Specialist Logging Channels
+                Map.entry("gatekeeperLog", Channels.base(() -> "")),
+                Map.entry("vulnerabilityLog", Channels.base(() -> "")),
+                Map.entry("performanceLog", Channels.base(() -> "")),
+                Map.entry("businessAnalysisLog", Channels.base(() -> "")),
+
+                // The 4 Isolated Tech Review Tracks
+                Map.entry("pciComplianceLog", Channels.base(() -> "")),
+                Map.entry("diComplianceLog", Channels.base(() -> "")),
+                Map.entry("exceptionLog", Channels.base(() -> "")),
+                Map.entry("stylingLog", Channels.base(() -> "")),
+
+                Map.entry("observabilityLog", Channels.base(() -> "")),
+
+                // Output & Control Channels
+                Map.entry("violationRegistry", Channels.appender(ArrayList::new)),
+                Map.entry("finalMergedReport", Channels.base(() -> "")),
+                Map.entry("isApproved", Channels.base(() -> false))
         );
 
         public ReviewState(Map<String, Object> initData) { super(initData); }
-        
-        // Type-Safe Accessors
+
         public String rawGitDiff() { return this.<String>value("rawGitDiff").orElse(""); }
         public String acceptanceCriteria() { return this.<String>value("acceptanceCriteria").orElse(""); }
         public String domainContext() { return this.<String>value("domainContext").orElse(""); }
-        
+
         public String gatekeeperLog() { return this.<String>value("gatekeeperLog").orElse(""); }
         public String vulnerabilityLog() { return this.<String>value("vulnerabilityLog").orElse(""); }
         public String performanceLog() { return this.<String>value("performanceLog").orElse(""); }
         public String businessAnalysisLog() { return this.<String>value("businessAnalysisLog").orElse(""); }
-        
-        // --- NEW: Type-Safe Accessors for Tech Sub-Agents ---
+
         public String pciComplianceLog() { return this.<String>value("pciComplianceLog").orElse(""); }
         public String diComplianceLog() { return this.<String>value("diComplianceLog").orElse(""); }
         public String exceptionLog() { return this.<String>value("exceptionLog").orElse(""); }
         public String stylingLog() { return this.<String>value("stylingLog").orElse(""); }
-        
+
         public String observabilityLog() { return this.<String>value("observabilityLog").orElse(""); }
-        
+
         public List<String> violationRegistry() { return this.<List<String>>value("violationRegistry").orElse(new ArrayList<>()); }
         public boolean isApproved() { return this.<Boolean>value("isApproved").orElse(false); }
     }
 
     // ============================================================================
-    // 1.5 STRUCTURED OUTPUT POJOS
+    // 1.5 STRUCTURED OUTPUT POJO (The JSON Schema mapped checklist)
     // ============================================================================
     public static class TechRuleReport {
         public boolean violationFound;
@@ -95,35 +93,35 @@ public class CodeReviewComplianceEngine {
     // ============================================================================
     // 2. DOMAIN ORACLE & TOOLS
     // ============================================================================
-    @ApplicationScoped
-    public static class OrganizationLookupTools {
-        @Tool("Look up the team that owns a specific file path or module.")
-        public String getTeamOwnershipForPath(String filePath) {
-            if (filePath.contains("/billing/")) return "TEAM: Finance | DOMAIN: Billing";
-            if (filePath.contains("/inventory/")) return "TEAM: Supply-Chain | DOMAIN: Inventory";
-            return "TEAM: Platform | DOMAIN: Shared Services";
-        }
-    }
-
+//    @ApplicationScoped
+//    public static class OrganizationLookupTools {
+//        @Tool("Look up the team that owns a specific file path or module.")
+//        public String getTeamOwnershipForPath(String filePath) {
+//            if (filePath.contains("/billing/")) return "TEAM: Finance | DOMAIN: Billing";
+//            if (filePath.contains("/inventory/")) return "TEAM: Supply-Chain | DOMAIN: Inventory";
+//            return "TEAM: Platform | DOMAIN: Shared Services";
+//        }
+//    }
 
     // ============================================================================
-    // 3. GRAPH ENGINE CONTROLLER
+    // 4. GRAPH ENGINE CONTROLLER
     // ============================================================================
     @ApplicationScoped
     public static class EnterprisePipelineRunner implements QuarkusApplication {
 
-        @Inject GatekeeperAgent gatekeeper;
+        @Inject
+        GatekeeperAgent gatekeeper;
         @Inject DomainContextOracle domainOracle;
-        @Inject SecurityGuardAgent security;
+        @Inject
+        SecurityGuardAgent security;
         @Inject PerformanceCriticAgent performance;
         @Inject BusinessAnalysisAgent ba;
-        
-        // --- NEW: Injecting the specialized Tech agents ---
+
         @Inject PciComplianceAgent pciAgent;
+        @Inject DependencyInjectionAgent diAgent;
         @Inject ExceptionHandlingAgent exceptionAgent;
         @Inject StylingAgent stylingAgent;
-        // --------------------------------------------------
-        
+
         @Inject ObservabilityAgent observability;
         @Inject DoneDefAgent doneDef;
 
@@ -132,48 +130,45 @@ public class CodeReviewComplianceEngine {
             System.out.println("\n=== BOOTING 11-NODE COMPLIANCE PIPELINE ===");
 
             StateGraph<ReviewState> workflow = new StateGraph<>(ReviewState.SCHEMA, ReviewState::new)
-                .addNode("n_gatekeeper", node_async(this::runGatekeeper))
-                .addNode("n_domain", node_async(this::runDomain))
-                .addNode("n_security", node_async(this::runSecurity))
-                .addNode("n_performance", node_async(this::runPerformance))
-                .addNode("n_ba", node_async(this::runBA))
-                
-                // --- NEW: Isolated Tech Nodes ---
-                .addNode("n_pci", node_async(this::runPciCheck))
-                .addNode("n_exceptions", node_async(this::runExceptionCheck))
-                .addNode("n_styling", node_async(this::runStylingCheck))
-                // --------------------------------
-                
-                .addNode("n_observability", node_async(this::runObservability))
-                .addNode("n_donedef", node_async(this::runDoneDef))
-                
-                // Pipeline sequence
-                .addEdge(START, "n_gatekeeper")
-                .addConditionalEdges("n_gatekeeper", edge_async(this::evaluateGatekeeper), 
-                    Map.of("bypass", END, "proceed", "n_domain")
-                )
-                .addEdge("n_domain", "n_security")
-                .addEdge("n_security", "n_performance")
-                .addEdge("n_performance", "n_ba")
-                
-                // --- NEW: Wire the Tech agents sequentially ---
-                .addEdge("n_ba", "n_pci")
-                .addEdge("n_pci", "n_di")
-                .addEdge("n_di", "n_exceptions")
-                .addEdge("n_exceptions", "n_styling")
-                .addEdge("n_styling", "n_observability")
-                // ----------------------------------------------
-                
-                .addEdge("n_observability", "n_donedef")
-                
-                // Final Sign-off
-                .addConditionalEdges("n_donedef", edge_async(this::evaluateFinalGate), 
-                    Map.of("merge_approved", END, "merge_rejected", END)
-                );
+                    // 1. ADDING ALL THE NODES TO THE REGISTRY
+                    .addNode("n_gatekeeper", node_async(this::runGatekeeper))
+                    .addNode("n_domain", node_async(this::runDomain))
+                    .addNode("n_security", node_async(this::runSecurity))
+                    .addNode("n_performance", node_async(this::runPerformance))
+                    .addNode("n_ba", node_async(this::runBA))
+                    .addNode("n_pci", node_async(this::runPciCheck))
+                    .addNode("n_di", node_async(this::runDiCheck))
+                    .addNode("n_exceptions", node_async(this::runExceptionCheck))
+                    .addNode("n_styling", node_async(this::runStylingCheck))
+                    .addNode("n_observability", node_async(this::runObservability))
+                    .addNode("n_donedef", node_async(this::runDoneDef))
+
+                    // 2. WIRING THE EDGES
+                    .addEdge(START, "n_gatekeeper")
+                    .addConditionalEdges("n_gatekeeper", edge_async(this::evaluateGatekeeper),
+                            Map.of("bypass", END, "proceed", "n_domain")
+                    )
+                    .addEdge("n_domain", "n_security")
+                    .addEdge("n_security", "n_performance")
+                    .addEdge("n_performance", "n_ba")
+
+                    // Tech Node Sequence
+                    .addEdge("n_ba", "n_pci")
+                    .addEdge("n_pci", "n_di")
+                    .addEdge("n_di", "n_exceptions")
+                    .addEdge("n_exceptions", "n_styling")
+                    .addEdge("n_styling", "n_observability")
+
+                    .addEdge("n_observability", "n_donedef")
+
+                    // Final Routing Check
+                    .addConditionalEdges("n_donedef", edge_async(this::evaluateFinalGate),
+                            Map.of("merge_approved", END, "merge_rejected", END)
+                    );
 
             var engine = workflow.compile();
 
-            // Mock Payload containing PCI and Architecture violations
+            // Mock Payload containing a PCI violation and an Architecture violation
             String badCodePR = """
                 diff --git a/src/main/java/com/billing/PaymentService.java
                 +++ b/src/main/java/com/billing/PaymentService.java
@@ -190,9 +185,26 @@ public class CodeReviewComplianceEngine {
                 + }
                 """;
 
+            // Change this string to test different scenarios!
+            String goodCodePR = """
+            diff --git a/src/main/java/com/billing/PaymentService.java
+            +++ b/src/main/java/com/billing/PaymentService.java
+            @@ -12,4 +12,14 @@ 
+            + public class PaymentService {
+            +    @Inject DatabaseConnection db; // ILLEGAL INJECT OUTSIDE CONTROLLER
+            +
+            +    public void processTransaction(String panNumber) {
+            +        System.out.println("Processing raw payment for PAN: " + panNumber); // PCI BREACH!
+            +        if(panNumber == null) {
+            +            throw new RuntimeException("PAN Missing"); // ILLEGAL RTE!
+            +        }
+            +    }
+            + }
+            """;
+
             Map<String, Object> payload = Map.of(
-                "rawGitDiff", badCodePR,
-                "acceptanceCriteria", "Ensure payments process gracefully without exposing secure data."
+                    "rawGitDiff", badCodePR,
+                    "acceptanceCriteria", "Ensure payments process gracefully without exposing secure data."
             );
 
             System.out.println("--> Injecting PR into State Matrix...");
@@ -222,7 +234,14 @@ public class CodeReviewComplianceEngine {
 
         private Map<String, Object> runDomain(ReviewState state) {
             System.out.println("[NODE 2] Domain Oracle mapping team boundaries...");
-            String log = domainOracle.analyzeOrganizationalImpact(state.rawGitDiff());
+
+            // 1. Run the deterministic Java lookup instead of relying on the AI tool
+            String domainInfo = getTeamOwnershipForPath(state.rawGitDiff());
+
+            // 2. Combine it into a single text prompt for the AI
+            String prompt = "Domain Ownership Rule: " + domainInfo + "\n\nGit Diff:\n" + state.rawGitDiff();
+            String log = domainOracle.analyzeOrganizationalImpact(prompt);
+
             return checkForViolations("domainContext", log, "Domain Violation");
         }
 
@@ -245,32 +264,39 @@ public class CodeReviewComplianceEngine {
             return checkForViolations("businessAnalysisLog", log, "Business Logic Failure");
         }
 
-        // --- NEW: Sub-Node Executions for Tech Rules ---
-        
+        // --- THE 4 SPECIALIZED TECH NODES ---
         private Map<String, Object> runPciCheck(ReviewState state) {
             System.out.println("[NODE 6.1] PCI Agent scanning for unmasked PANs...");
             TechRuleReport report = pciAgent.auditPci(state.rawGitDiff());
             List<String> violations = new ArrayList<>();
-            if (report.violationFound) violations.add("Tech Mandate: PCI PAN Masking Breach");
+            if (report.violationFound) violations.add("PCI PAN Masking Breach");
             return Map.of("pciComplianceLog", report.agentReasoning, "violationRegistry", violations);
         }
 
+        private Map<String, Object> runDiCheck(ReviewState state) {
+            System.out.println("[NODE 6.2] DI Agent enforcing @Inject boundaries...");
+            TechRuleReport report = diAgent.auditDi(state.rawGitDiff());
+            List<String> violations = new ArrayList<>();
+            if (report.violationFound) violations.add("Illegal @Inject Use");
+            return Map.of("diComplianceLog", report.agentReasoning, "violationRegistry", violations);
+        }
+
         private Map<String, Object> runExceptionCheck(ReviewState state) {
-            System.out.println("[NODE 6.2] Exception Agent tracking stack trace leaks...");
+            System.out.println("[NODE 6.3] Exception Agent tracking stack trace leaks...");
             TechRuleReport report = exceptionAgent.auditExceptions(state.rawGitDiff());
             List<String> violations = new ArrayList<>();
-            if (report.violationFound) violations.add("Tech Mandate: Illegal Exception Handling");
+            if (report.violationFound) violations.add("Illegal Exception Handling");
             return Map.of("exceptionLog", report.agentReasoning, "violationRegistry", violations);
         }
 
         private Map<String, Object> runStylingCheck(ReviewState state) {
-            System.out.println("[NODE 6.3] Styling Agent reviewing code conventions...");
+            System.out.println("[NODE 6.4] Styling Agent reviewing code conventions...");
             TechRuleReport report = stylingAgent.auditStyling(state.rawGitDiff());
             List<String> violations = new ArrayList<>();
-            if (report.violationFound) violations.add("Tech Mandate: Critical Formatting Failure");
+            if (report.violationFound) violations.add("Critical Formatting Failure");
             return Map.of("stylingLog", report.agentReasoning, "violationRegistry", violations);
         }
-        // -----------------------------------------------
+        // ------------------------------------
 
         private Map<String, Object> runObservability(ReviewState state) {
             System.out.println("[NODE 7] Observability tracking logs and metrics...");
@@ -280,18 +306,17 @@ public class CodeReviewComplianceEngine {
 
         private Map<String, Object> runDoneDef(ReviewState state) {
             System.out.println("[NODE 8] DoneDef Manager synthesizing final decision...");
-            
-            // --- NEW: Combine all the specialized tech logs into the final payload ---
+
             String combined = String.format(
-                "Domain: %s\nSecurity: %s\nPerf: %s\nBA: %s\nPCI: %s\nDI: %s\nExceptions: %s\nStyling: %s\nObs: %s",
-                state.domainContext(), state.vulnerabilityLog(), state.performanceLog(),
-                state.businessAnalysisLog(), state.pciComplianceLog(), state.diComplianceLog(),
-                state.exceptionLog(), state.stylingLog(), state.observabilityLog()
+                    "Domain: %s\nSecurity: %s\nPerf: %s\nBA: %s\nPCI: %s\nDI: %s\nExceptions: %s\nStyling: %s\nObs: %s",
+                    state.domainContext(), state.vulnerabilityLog(), state.performanceLog(), state.businessAnalysisLog(),
+                    state.pciComplianceLog(), state.diComplianceLog(), state.exceptionLog(), state.stylingLog(),
+                    state.observabilityLog()
             );
-            
+
             String finalReport = doneDef.generateFinalReport(combined);
             boolean isApproved = state.violationRegistry().isEmpty();
-            
+
             return Map.of("finalMergedReport", finalReport, "isApproved", isApproved);
         }
 
@@ -299,13 +324,20 @@ public class CodeReviewComplianceEngine {
             return state.isApproved() ? "merge_approved" : "merge_rejected";
         }
 
-        // Helper to DRY up violation checking for simple string logs
         private Map<String, Object> checkForViolations(String channelName, String logResult, String violationName) {
             if (logResult.contains("CRITICAL_VIOLATION_FOUND")) {
-                // If a violation is found, update the channel AND append to the registry
                 return Map.of(channelName, logResult, "violationRegistry", List.of(violationName));
             }
             return Map.of(channelName, logResult);
         }
+
+        // --- NEW: Deterministic Lookup Method (Moved from the old Tool class) ---
+        private String getTeamOwnershipForPath(String filePath) {
+            if (filePath.contains("/billing/")) return "TEAM: Finance | DOMAIN: Billing";
+            if (filePath.contains("/inventory/")) return "TEAM: Supply-Chain | DOMAIN: Inventory";
+            return "TEAM: Platform | DOMAIN: Shared Services";
+        }
     }
+
+
 }
